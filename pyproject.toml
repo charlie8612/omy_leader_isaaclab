@@ -1,0 +1,13 @@
+[project]
+name = "omy-leader-isaaclab"
+version = "0.1.0"
+description = "ROBOTIS OMY-L100 leader arm as an Isaac Lab / cyclo_lab teleoperation device"
+requires-python = ">=3.10"
+dependencies = ["numpy", "dynamixel-sdk>=3.7"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["omy_leader_isaaclab"]

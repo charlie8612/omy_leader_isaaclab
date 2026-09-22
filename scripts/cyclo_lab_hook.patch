@@ -1,0 +1,8 @@
+# Append to robotis_lab/source/cyclo_lab/cyclo_lab/__init__.py so record_demos.py sees the
+# omy_leader device and the *-OMY-Leader-v0 envs (this is the whole upstream hook).
+
+# optional: ROBOTIS OMY-L100 leader teleop device + *-OMY-Leader-v0 envs
+try:
+    import omy_leader_isaaclab  # noqa: F401
+except ImportError:
+    pass

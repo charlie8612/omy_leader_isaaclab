@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.venv/
+*.hdf5
+omy_calib.json
