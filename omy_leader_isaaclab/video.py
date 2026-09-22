@@ -111,8 +111,16 @@ class VideoClient:
 
     def _read(self, n: int) -> bytes:
         buf = b""
+        waited = 0.0
         while len(buf) < n:
-            chunk = self._s.recv(n - len(buf))
+            try:
+                chunk = self._s.recv(n - len(buf))
+            except (socket.timeout, TimeoutError):
+                # the sim only pushes frames once its control loop runs (i.e. once the leader stream is
+                # up); keep waiting instead of failing so the viewer can be started first
+                waited += 10.0
+                print(f"[viewer] no frames yet ({waited:.0f}s) - sim waiting for the leader stream?", flush=True)
+                continue
             if not chunk:
                 raise ConnectionError("video stream closed")
             buf += chunk

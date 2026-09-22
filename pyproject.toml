@@ -1,9 +1,28 @@
 [project]
 name = "omy-leader-isaaclab"
 version = "0.1.0"
-description = "ROBOTIS OMY-L100 leader arm as an Isaac Lab / cyclo_lab teleoperation device"
+description = "ROBOTIS OMY-L100 leader arm as an Isaac Lab teleoperation device: 1:1 to the simulated OMY (ROBOTIS Lab / cyclo_lab) or cross-embodiment to the Franka Panda"
+readme = "README.md"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
+authors = [{ name = "charlie8612" }]
+keywords = ["isaac-lab", "isaac-sim", "teleoperation", "robotis", "omy", "franka", "leader-arm", "dynamixel"]
 dependencies = ["numpy", "dynamixel-sdk>=3.7"]
+
+[project.optional-dependencies]
+lerobot = ["lerobot_teleoperator_omy"]      # alternative leader reader (charlie8612/lerobot_teleoperator_omy)
+viewer = ["opencv-python", "pillow"]         # laptop-side video viewer
+test = ["pytest"]
+
+[project.scripts]
+omy-leader-publisher = "omy_leader_isaaclab.publisher:main"
+omy-leader-viewer = "omy_leader_isaaclab.viewer:main"
+omy-leader-calib = "omy_leader_isaaclab.franka_calib:main"
+omy-leader-monitor = "omy_leader_isaaclab.franka_monitor:main"
+omy-leader-fake = "omy_leader_isaaclab.fake_publisher:main"
+
+[project.urls]
+Homepage = "https://github.com/charlie8612/omy_leader_isaaclab"
 
 [build-system]
 requires = ["setuptools>=61"]

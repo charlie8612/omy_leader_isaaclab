@@ -28,14 +28,20 @@ def main():
     ap.add_argument("--amp", type=float, default=0.3)
     ap.add_argument("--period", type=float, default=6.0)
     ap.add_argument("--still", action="store_true")
+    ap.add_argument("--profile", choices=["omy", "franka"], default="omy",
+                    help="rest pose: OMY default (1:1 target) or the L100 pose that maps to FRANKA_HOME")
     args = ap.parse_args()
+    if args.profile == "franka":
+        home = dict(zip(OMY_JOINTS, (0.0, -math.pi / 4, 3 * math.pi / 4, 0.0, math.pi / 2, 0.0)))
+    else:
+        home = dict(zip(OMY_JOINTS, OMY_DEFAULT_Q))
     server = FrameServer(args.tcp_host, args.tcp_port)
     print(f"[fake-omy] listening on {args.tcp_host}:{args.tcp_port}")
     seq, t0 = 0, time.time()
     while True:
         t = time.time() - t0
         w = 0.0 if args.still else 2 * math.pi * t / args.period
-        a = {f"{j}.pos": q for j, q in zip(OMY_JOINTS, OMY_DEFAULT_Q)}
+        a = {f"{j}.pos": q for j, q in home.items()}
         a["joint_1.pos"] += args.amp * math.sin(w)
         a["joint_3.pos"] += 0.5 * args.amp * math.sin(0.5 * w)
         a["joint_5.pos"] += 0.5 * args.amp * math.sin(0.7 * w)

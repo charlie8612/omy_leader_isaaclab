@@ -1,59 +1,124 @@
 # omy_leader_isaaclab
 
-ROBOTIS **OMY-L100** leader arm as an **Isaac Lab / cyclo_lab (ROBOTIS Lab)** teleoperation device:
-joint-space 1:1 mirror onto the simulated OMY-F3M, plugged into Isaac Lab's official
-`create_teleop_device` factory so `record_demos.py --teleop_device omy_leader` works.
+Use a **ROBOTIS OMY-L100 leader arm** to teleoperate robots in **NVIDIA Isaac Lab** — in joint
+space, no IK, from a single pip-installable repo.
 
-## 現況（2026-09-22）
+| target | mapping | env |
+|---|---|---|
+| **OMY-F3M** (ROBOTIS Lab / [cyclo_lab](https://github.com/ROBOTIS-GIT/robotis_lab)) | 1:1 joint mirror (same kinematics) | `Cyclo-Lift-Cube-OMY-Leader-v0`, `Cyclo-Pick-Place-Bottle-OMY-Leader-v0` |
+| **Franka Panda** (Isaac Lab stack task) | arm 1:1 with J3 locked, wrist remapped (fixed per-joint map, optional exact ZYZ solve) | `Isaac-Stack-Cube-Franka-JointTeleop-v0` (+ `-Cam-v0` with cameras) |
 
-- cyclo_lab 側整條路線用**假 leader**驗過（rllab1015，Isaac Sim 5.1.0 + Isaac Lab v2.3.0 + robotis_lab）：
-  device 經官方 factory 建立 → `Cyclo-Lift-Cube-OMY-Leader-v0` 絕對 joint action → 追蹤誤差 < 0.03 rad。
-- **真機還沒驗**：`omy_serial.py`（DynamixelSDK 直讀）從未接過 L100；1:1 的 sign/zero 要用 `--auto-zero` 校一次。
-- 上游：投 [ROBOTIS-GIT/robotis_lab](https://github.com/ROBOTIS-GIT/robotis_lab)（他們的 OMY sim 目前只有鍵盤 IK teleop）。
-  hook 只需 3 行，見 `scripts/cyclo_lab_hook.patch`。
-- 姊妹專案 `../issacsim/`：同一支 L100 開 **Franka**（跨機構 retarget，腕部 ZYZ 閉式解）。
+The leader is exposed as an Isaac Lab **teleop device** (`OmyLeaderCfg` / `OmyLeaderDevice`) registered
+in the official `create_teleop_device` factory, so scripts that build their device from
+`env_cfg.teleop_devices` — e.g. cyclo_lab's `record_demos.py` — use it with `--teleop_device omy_leader`
+and no code changes.
 
-## 目錄地圖
+Why joint space: an end-effector teleop through differential IK lags, drifts and cannot control the
+redundant joint; a leader arm gives you every joint directly.
+
+## Install
+
+On the machine running Isaac Sim / Isaac Lab (tested: Isaac Sim 5.1.0 with Isaac Lab v2.3.0 + robotis_lab,
+and with Isaac Lab `main`):
+
+```bash
+# inside your Isaac Lab python environment
+pip install git+https://github.com/charlie8612/omy_leader_isaaclab
+```
+
+Dependencies are only `numpy` and `dynamixel-sdk` (the L100 is read directly over Protocol 2.0, 4 Mbps).
+Optional: `[lerobot]` to read the leader through [`lerobot_teleoperator_omy`](https://github.com/charlie8612/lerobot_teleoperator_omy)
+instead, `[viewer]` for the laptop video viewer.
+
+For the OMY targets install ROBOTIS Lab as well and add the 3-line hook from `scripts/cyclo_lab_hook.patch`
+to `cyclo_lab/__init__.py` (this is what a `record_demos.py` invocation needs to see the device and envs).
+
+## Quick start (leader plugged into the sim machine)
+
+```bash
+export ISAACLAB=~/IsaacLab
+scripts/run_teleop.sh --target omy    --auto-zero             # OMY in cyclo_lab, with a display
+scripts/run_teleop.sh --target franka --auto-zero --headless --stream   # Franka, video on port 5556
+```
+
+`--auto-zero`: when the stream comes up, hold the leader in the target's default pose (what you see on
+screen) for 3 s; per-joint zeros are computed. Add `--port /dev/ttyUSB0` if your udev name differs.
+
+Record demos with cyclo_lab's own script (device settings come from env vars, no new flags):
+
+```bash
+OMY_LEADER_SOURCE=serial OMY_LEADER_AUTO_ZERO=1 \
+python scripts/imitation_learning/isaaclab_recorder/record_demos.py \
+    --task Cyclo-Pick-Place-Bottle-OMY-Leader-v0 --teleop_device omy_leader --dataset_file datasets/omy.hdf5
+```
+
+## Leader on a different machine / sim on a headless server
+
+```
+[L100 host]  omy-leader-publisher --port /dev/robotis_left         # 72-byte TCP frames, 100 Hz
+             ssh -N -R 5555:localhost:5555 <sim host>               # or relay through the laptop
+[sim host]   scripts/run_teleop.sh --target franka --source tcp --headless --stream
+[laptop]     SIM_HOST=<sim> L100_HOST=<l100 host> scripts/laptop_connect.sh   # tunnels + viewer window
+```
+
+The video is the sim's own camera rendered to JPEG over TCP (30 fps, a few ms over a LAN), which works
+through plain ssh where Isaac's WebRTC livestream (UDP) cannot.
+
+## Calibration
+
+`--auto-zero` is usually enough. For a persistent calibration (signs, zeros, gripper endpoints, wrist mode):
+
+```bash
+omy-leader-calib                      # lerobot-style: sweep every joint to its limits, then hold the ready pose
+omy-leader-monitor --calib omy_calib.json   # live raw angles + mapped Franka joints
+scripts/run_teleop.sh --target franka --calib omy_calib.json
+```
+
+`examples/omy_calib_franka.json` is a real calibration of one L100 (signs j2/j4/j6 inverted relative to
+the URDF axes; wrist mode `direct`, reset with the hand in line with the forearm). Flip a joint's
+`omy_sign` if it moves the wrong way in the sim.
+
+### Franka wrist mapping
+
+The L100 is UR-like (yaw–pitch–pitch, then pitch–roll–spin) and the Franka with J3 = 0 is
+yaw–pitch–pitch, roll–pitch–roll. Around the operator's working pose the joints correspond one to one,
+so the default `direct` mode uses
+
+```
+J1 = j1   J2 = j2   J3 = 0   J4 = j3        J5 = j5   J6 = 180° − j4   J7 = 45° − j6
+```
+
+(with per-joint sign/zero from calibration). `wrist_mode: zyz` instead matches the tool orientation
+exactly via a closed-form ZYZ decomposition (`franka_wrist.py`), at the cost of J5/J7 coupling near the
+Franka wrist singularity (J6 = 0 or 180°).
+
+## Layout
 
 ```
 omy_leader_isaaclab/
-  omy_serial.py     L100 讀取：DynamixelSDK Protocol 2.0，不依賴 lerobot；夾爪彈簧（current-position mode）
-  link.py           跨主機 TCP frame（leader 插在別台時用 publisher + ssh -R）
-  mirror.py         L100 -> OMY 1:1：sign / zero / 限速 / 夾爪 hysteresis / auto_zero 對 OMY 預設姿
-  device.py         OmyLeaderCfg(DeviceCfg) + OmyLeaderDevice(DeviceBase)；import 即註冊進 factory
-  env_cfg.py        Cyclo-Lift-Cube-OMY-Leader-v0、Cyclo-Pick-Place-Bottle-OMY-Leader-v0（絕對 joint action + teleop_devices）
-  teleop.py         獨立 runner（--stream 開 JPEG 相機串流）
-  fake_publisher.py 無硬體測試用；viewer.py / video.py 串流
-scripts/
-  run_teleop_1015.sh      在 rllab1015 的 cyclo venv 跑 runner
-  cyclo_lab_hook.patch    要加進 cyclo_lab/__init__.py 的 3 行
+  device.py           OmyLeaderCfg(target="omy"|"franka", source="serial"|"tcp") + OmyLeaderDevice(DeviceBase)
+  omy_serial.py       DynamixelSDK reader (arm torque-off extended position, spring-loaded gripper trigger)
+  link.py             TCP leader stream (publisher.py <-> device)
+  mirror.py           L100 -> OMY 1:1 (sign / zero / rate limit / gripper hysteresis / auto-zero)
+  franka_config.py    Franka mapping config, joint limits, calibration loader
+  franka_retarget.py  L100 -> Franka 8-d action (J3 locked, wrist direct or ZYZ)
+  franka_wrist.py     wrist geometry: direct map and closed-form ZYZ solve
+  franka_calib.py     lerobot-style calibration -> omy_calib.json;  franka_monitor.py: live readout
+  omy_env_cfg.py      cyclo_lab OMY tasks with absolute JointPositionAction + teleop_devices
+  franka_env_cfg.py   Isaac Lab Franka stack task, same treatment (+ camera variant)
+  teleop.py           standalone runner (--target, --source, --stream)
+  publisher.py / fake_publisher.py / video.py / viewer.py
+scripts/              run_teleop.sh, laptop_connect.sh, cyclo_lab_hook.patch
+tests/                pure-numpy tests of both mappings (pytest)
 ```
 
-環境變數（給 `record_demos.py` 用，不用改它的旗標）：`OMY_LEADER_SOURCE=serial|tcp`、`OMY_LEADER_PORT`、
-`OMY_LEADER_TCP_PORT`、`OMY_LEADER_CALIB`、`OMY_LEADER_AUTO_ZERO=1`。
+## Status
 
-## 明天的硬體驗證（依序）
+- Franka target: driven with a real L100 (Isaac Lab `main`, Isaac Sim 5.1.0).
+- OMY target: verified end to end with a simulated leader in cyclo_lab; the DynamixelSDK reader has
+  been exercised only through the lerobot path so far — please open an issue if your L100 misbehaves.
+- cyclo_lab's `record_demos.py` imports `omni.ui`, so it needs a display (not `--headless`).
 
-1. **serial 讀取**（L100 插在跑 sim 的機器，或任何有 dynamixel-sdk 的機器）：
-   `python -m omy_leader_isaaclab.omy_serial /dev/robotis_left` → 六軸 + 夾爪角度會刷新；捏扳機數值變大、放開回 0。
-   失敗多半是 baudrate（預設 4 Mbps）或 udev 權限。
-2. **1:1 mirror + auto-zero**（1015）：
-   `scripts/run_teleop_1015.sh --source serial --port /dev/robotis_left --auto-zero`
-   啟動後 3 秒內把 L100 擺成 OMY 預設姿（`joint2=-1.55, joint3=2.66, joint4=-1.1, joint5=1.6`，即 sim 一開始的樣子）。
-   Mac：`ssh -N -L 5556:localhost:5556 rllab518_4090_2 &` 然後 `python -m omy_leader_isaaclab.viewer`。
-3. **方向**：逐軸動，反的在 `omy_calib.json` 的 `omy_sign` 翻成 -1（j2/j4/j6 在 Franka 專案量到是 -1，OMY 應相同）。
-   之後用 `--calib omy_calib.json` 取代 `--auto-zero`。
-4. **官方腳本**（需要有畫面的機器，`record_demos.py` import `omni.ui`，headless 跑不了）：
-   先把 `scripts/cyclo_lab_hook.patch` 的 3 行加進 cyclo_lab，然後
-   `OMY_LEADER_SOURCE=serial python scripts/imitation_learning/isaaclab_recorder/record_demos.py --task Cyclo-Pick-Place-Bottle-OMY-Leader-v0 --teleop_device omy_leader --dataset_file datasets/omy_leader.hdf5 --num_demos 1`
-5. 錄一段 30 秒影片（issue / PR 用）。
+## License
 
-L100 插在別台時：那台跑 `python -m omy_franka_teleop.publisher`（issacsim 專案）+ `ssh -R 5555`，這邊 `--source tcp`。
-
-## 文件索引
-
-| 編號 | 檔案 | 狀態 |
-|---|---|---|
-| — | （尚無 docs/；決策與現況先記在本 README） | |
-
-命名規則：`docs/NN_YYYY-MM-DD_<kind>_<slug>.zh.md`（見 codebox 慣例）。
+Apache-2.0.

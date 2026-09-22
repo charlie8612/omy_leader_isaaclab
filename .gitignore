@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.pytest_cache/
 *.hdf5
+*.egg-info/
 omy_calib.json
