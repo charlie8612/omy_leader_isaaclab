@@ -1,8 +1,8 @@
 """Operator-side viewer for the sim camera stream. Runs on the Mac; needs numpy + (cv2 or PIL).
 
-    ssh -N -L 5556:localhost:5556 rllab518_4090_2 &
-    python -m omy_franka_teleop.viewer                 # window; q / Esc quits
-    python -m omy_franka_teleop.viewer --save out.jpg --frames 30   # headless check: save 30th frame
+    ssh -N -L 5556:localhost:5556 <sim host> &        # only when the sim runs elsewhere
+    omy-leader-viewer                 # window; q / Esc quits
+    omy-leader-viewer --save out.jpg --frames 30   # headless check: save 30th frame
 """
 
 from __future__ import annotations
