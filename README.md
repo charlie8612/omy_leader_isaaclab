@@ -52,7 +52,10 @@ python scripts/imitation_learning/isaaclab_recorder/record_demos.py \
     --task Cyclo-Pick-Place-Bottle-OMY-Leader-v0 --teleop_device omy_leader --dataset_file datasets/omy.hdf5
 ```
 
-## Leader on a different machine / sim on a headless server
+## Advanced: leader on a different machine / sim on a headless server
+
+The common setup is one PC with Isaac Sim and the L100 on USB — everything above is that. If your sim
+runs on a headless server elsewhere:
 
 ```
 [L100 host]  omy-leader-publisher --port /dev/robotis_left         # 72-byte TCP frames, 100 Hz

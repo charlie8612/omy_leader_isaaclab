@@ -1,8 +1,8 @@
 """Live monitor of the L100 leader: raw plugin angles and, with --calib, the mapped Franka joints.
 
-Run on the L100 host while publisher.py streams (or anywhere the stream is tunnelled to):
+Reads the L100 directly (default) or a publisher.py stream (--source tcp):
 
-    python -m omy_franka_teleop.monitor --calib omy_calib.json
+    omy-leader-monitor --calib omy_calib.json
 
 Refreshes in place at 10 Hz; Ctrl-C to quit. All angles in degrees.
   raw   : what the plugin reports (after the publisher's rad conversion), before sign/zero
@@ -11,7 +11,7 @@ Refreshes in place at 10 Hz; Ctrl-C to quit. All angles in degrees.
 
 from __future__ import annotations
 
-if __package__ in (None, ""):  # allow `python omy_franka_teleop/<file>.py` as well as `python -m omy_franka_teleop.<file>`
+if __package__ in (None, ""):  # allow `python omy_leader_isaaclab/<file>.py` as well as `python -m omy_leader_isaaclab.<file>`
     import pathlib
     import sys
 
@@ -25,21 +25,26 @@ import time
 import numpy as np
 
 from .franka_config import DEFAULT_OMY_TO_FRANKA_CONFIG, load_calib
-from .link import DEFAULT_PORT, FrameClient
+from .link import DEFAULT_PORT, FrameClient  # noqa: F401
+from .omy_serial import open_reader
 from .franka_retarget import OMY_JOINTS, OmyToFrankaRetarget
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--source", choices=["serial", "tcp"], default="serial",
+                    help="serial = L100 on this machine (default); tcp = publisher.py on another host")
+    ap.add_argument("--port", default="/dev/robotis_left", help="serial device (source=serial)")
+    ap.add_argument("--baudrate", type=int, default=4_000_000)
+    ap.add_argument("--tcp-host", default="127.0.0.1")
+    ap.add_argument("--tcp-port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--calib", default="", help="omy_calib.json; if given, also show mapped Franka joints")
     ap.add_argument("--hz", type=float, default=10.0)
     args = ap.parse_args()
 
     cfg = load_calib(args.calib) if args.calib else DEFAULT_OMY_TO_FRANKA_CONFIG
     rt = OmyToFrankaRetarget(cfg)
-    client = FrameClient(args.host, args.port)
+    client = open_reader(args.source, args.port, args.baudrate, args.tcp_host, args.tcp_port)
     d = math.degrees
     print("waiting for stream ...")
     try:

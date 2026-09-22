@@ -102,6 +102,47 @@ class OmySerialLeader:
             self._port.closePort()
 
 
+class SerialClient:
+    """Background reader with the same ``latest()`` API as :class:`link.FrameClient`, so calibration
+    and monitor tools can read the leader directly on the sim machine (the common single-PC setup)."""
+
+    def __init__(self, port: str = "/dev/robotis_left", baudrate: int = 4_000_000, hz: float = 100.0):
+        import threading
+
+        self._leader = OmySerialLeader(port, baudrate)
+        self._buf: tuple[dict | None, float] = (None, 0.0)
+        self._stop = threading.Event()
+        self._period = 1.0 / hz
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    def _loop(self):
+        while not self._stop.is_set():
+            try:
+                self._buf = (self._leader.read(), time.time())
+            except Exception as e:  # noqa: BLE001
+                print(f"[omy_serial] read error: {e}")
+                time.sleep(0.5)
+            time.sleep(self._period)
+
+    def latest(self):
+        a, t = self._buf
+        return (None, float("inf")) if a is None else (a, time.time() - t)
+
+    def close(self):
+        self._stop.set()
+        self._leader.close()
+
+
+def open_reader(source: str = "serial", port: str = "/dev/robotis_left", baudrate: int = 4_000_000,
+                tcp_host: str = "127.0.0.1", tcp_port: int = 5555):
+    """Return an object with ``latest()`` for either the local serial leader or a remote publisher."""
+    if source == "tcp":
+        from .link import FrameClient
+
+        return FrameClient(tcp_host, tcp_port)
+    return SerialClient(port, baudrate)
+
+
 if __name__ == "__main__":  # quick check: python -m omy_leader_isaaclab.omy_serial /dev/robotis_left
     import sys
 

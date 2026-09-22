@@ -1,8 +1,6 @@
-"""L100 -> Franka calibration, lerobot-style. Run on the L100 host while publisher.py is streaming.
+"""L100 -> Franka calibration, lerobot-style. Reads the L100 directly (default) or a publisher.py stream (--source tcp).
 
-    conda activate piper
-    cd ~/omy_franka_teleop_repo
-    python -m omy_franka_teleop.calib              # writes ./omy_calib.json
+    omy-leader-calib                # writes ./omy_calib.json   (or python -m omy_leader_isaaclab.franka_calib)
 
 Two steps, Enter each time:
 
@@ -18,7 +16,7 @@ Output is consumed by teleop.py --calib omy_calib.json.
 
 from __future__ import annotations
 
-if __package__ in (None, ""):  # allow `python omy_franka_teleop/<file>.py` as well as `python -m omy_franka_teleop.<file>`
+if __package__ in (None, ""):  # allow `python omy_leader_isaaclab/<file>.py` as well as `python -m omy_leader_isaaclab.<file>`
     import pathlib
     import sys
 
@@ -35,7 +33,8 @@ from dataclasses import replace
 import numpy as np
 
 from .franka_config import DEFAULT_OMY_TO_FRANKA_CONFIG, FRANKA_HOME
-from .link import DEFAULT_PORT, FrameClient
+from .link import DEFAULT_PORT, FrameClient  # noqa: F401
+from .omy_serial import open_reader
 from .franka_retarget import OMY_JOINTS, OmyToFrankaRetarget
 
 NAMES = (*OMY_JOINTS, "gripper")
@@ -56,7 +55,7 @@ def _read(client: FrameClient, n: int = 20) -> np.ndarray:
             vals.append([a[f"{k}.pos"] for k in NAMES])
         time.sleep(0.01)
     if not vals:
-        raise SystemExit("no L100 data - is publisher.py running on this host?")
+        raise SystemExit("no L100 data - check --port (serial) or that publisher.py is streaming (--source tcp)")
     return np.mean(vals, axis=0)
 
 
@@ -84,14 +83,18 @@ def _record_ranges(client: FrameClient) -> tuple[np.ndarray, np.ndarray]:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--source", choices=["serial", "tcp"], default="serial",
+                    help="serial = L100 on this machine (default); tcp = publisher.py on another host")
+    ap.add_argument("--port", default="/dev/robotis_left", help="serial device (source=serial)")
+    ap.add_argument("--baudrate", type=int, default=4_000_000)
+    ap.add_argument("--tcp-host", default="127.0.0.1")
+    ap.add_argument("--tcp-port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--out", default="omy_calib.json")
     ap.add_argument("--gripper-only", action="store_true", help="redo only the gripper (squeeze / release) and update --out in place")
     ap.add_argument("--center", default="joint_1,joint_5", help="joints whose zero is the range midpoint instead of the READY reading (left/right symmetric)")
     args = ap.parse_args()
 
-    client = FrameClient(args.host, args.port)
+    client = open_reader(args.source, args.port, args.baudrate, args.tcp_host, args.tcp_port)
     print("[calib] connecting to publisher ...")
     _read(client)
     print("[calib] OK, reading L100.")

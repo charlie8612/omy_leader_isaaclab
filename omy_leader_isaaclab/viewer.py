@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-if __package__ in (None, ""):  # allow `python omy_franka_teleop/<file>.py` as well as `python -m omy_franka_teleop.<file>`
+if __package__ in (None, ""):  # allow `python omy_leader_isaaclab/<file>.py` as well as `python -m omy_leader_isaaclab.<file>`
     import pathlib
     import sys
 
