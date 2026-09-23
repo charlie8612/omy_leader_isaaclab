@@ -45,7 +45,7 @@
     "gripper": -0.37047010803870867
   },
   "created": "2026-09-19 16:14:01",
-  "note": "wrist model v2 (tool along link6 -Y): READY wrist reads (0, 90deg, 0). omy_sign: flip to -1 if a joint moves the wrong way, then restart teleop | gripper values are true radians from the trigger rest (serial reader / publisher >= 0.1.1)",
+  "note": "wrist model v2 (tool along link6 -Y): READY wrist reads (0, 90deg, 0). omy_sign: flip to -1 if a joint moves the wrong way, then restart teleop | gripper values are true radians from the trigger rest (serial reader / publisher >= 0.1.1) | omy_scale: per-joint gain (raise joint_2/joint_3 ~1.3 if the follower cannot reach the table); franka_offset_deg: shift the whole Franka workspace",
   "wrist_direct_sign": {
     "J5": 1.0,
     "J6": 1.0,
@@ -57,5 +57,22 @@
     3.141592653589793,
     0.7853981633974483
   ],
-  "j6_reset_deg": 180.0
+  "j6_reset_deg": 180.0,
+  "omy_scale": {
+    "joint_1": 1.0,
+    "joint_2": 1.0,
+    "joint_3": 1.0,
+    "joint_4": 1.0,
+    "joint_5": 1.0,
+    "joint_6": 1.0
+  },
+  "franka_offset_deg": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ]
 }

@@ -5,3 +5,4 @@ __pycache__/
 *.hdf5
 *.egg-info/
 omy_calib.json
+notes_*.txt

@@ -58,6 +58,16 @@ class OmyToFrankaConfig:
     omy_sign: dict[str, float] = field(
         default_factory=lambda: {f"joint_{i}": 1.0 for i in range(1, 7)}
     )
+    # Per-joint gain around the zero: j = sign * scale * (raw - zero). The L100 links are ~0.7x the
+    # Franka's, so 1:1 angles do not give 1:1 hand height -- with scale 1 the follower cannot reach
+    # the table when the leader does. Raise joint_2 / joint_3 (typically 1.2-1.5) until the leader
+    # touching its table puts the Franka hand on the sim table. Reset pose is unaffected.
+    omy_scale: dict[str, float] = field(
+        default_factory=lambda: {f"joint_{i}": 1.0 for i in range(1, 7)}
+    )
+    # Constant shift of the Franka target per joint (rad, index 0..6), applied after the mapping.
+    # Moves the whole workspace (e.g. J2 +10 deg, J4 +15 deg lowers the reset pose toward the table).
+    franka_offset_rad: tuple[float, ...] = (0.0,) * 7
 
     # --- wrist ---
     # Constant roll between the L100 link6 frame and the Franka hand frame at the
@@ -104,4 +114,6 @@ def load_calib(path: str, base: OmyToFrankaConfig = DEFAULT_OMY_TO_FRANKA_CONFIG
         gripper_open_rad=float(c["gripper_open_rad"]),
         wrist_mode=str(c.get("wrist_mode", base.wrist_mode)),
         j6_reset_rad=math.radians(float(c.get("j6_reset_deg", math.degrees(base.j6_reset_rad)))),
+        omy_scale={**base.omy_scale, **{k: float(v) for k, v in c.get("omy_scale", {}).items()}},
+        franka_offset_rad=tuple(math.radians(float(v)) for v in c.get("franka_offset_deg", [0.0] * 7)),
     )

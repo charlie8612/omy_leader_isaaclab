@@ -102,3 +102,16 @@ def test_direct_wrist_mode():
     assert np.allclose(q[4:], [0.0, math.pi, math.pi / 4])            # reset wrist
     q = rt.raw_target(omy(j4=0.2, j5=0.3, j6=0.4))
     assert np.allclose(q[4:], [0.3, math.pi - 0.2, math.pi / 4 - 0.4])  # K5=+1, K4=-1, K7=-1, no coupling
+
+
+def test_scale_and_offset():
+    cfg = OmyToFrankaConfig(vel_scale=1e9, wrist_mode="direct",
+                            omy_scale={"joint_1": 1.0, "joint_2": 1.5, "joint_3": 2.0, "joint_4": 1.0, "joint_5": 1.0, "joint_6": 1.0},
+                            franka_offset_rad=(0.0, 0.1, 0.0, 0.2, 0.0, 0.0, 0.0))
+    rt = OmyToFrankaRetarget(cfg)
+    q = rt.raw_target(omy(j2=0.2, j3=0.3))
+    assert np.allclose(q[:4], [0.0, 0.3 + 0.1, 0.0, -0.6 + 0.2])   # scale then offset; J4 = -j3
+    # auto_offset still maps the current pose to home with scales applied
+    cfg2 = rt.auto_offset(omy(j1=0.2, j2=-1.0, j3=2.0, j4=1.0, j5=0.3, j6=0.2))
+    q2 = OmyToFrankaRetarget(cfg2).raw_target(omy(j1=0.2, j2=-1.0, j3=2.0, j4=1.0, j5=0.3, j6=0.2))
+    assert np.allclose(q2[:4], np.array(FRANKA_HOME[:4]) + np.array([0.0, 0.1, 0.0, 0.2]), atol=1e-6)

@@ -46,6 +46,8 @@ class OmyToFrankaRetarget:
         self._dq_max = np.array(FRANKA_VEL_MAX) * c.vel_scale * c.dt
         self._zero = np.array([c.omy_zero_rad.get(j, 0.0) for j in OMY_JOINTS])
         self._sign = np.array([c.omy_sign.get(j, 1.0) for j in OMY_JOINTS])
+        self._scale = np.array([c.omy_scale.get(j, 1.0) for j in OMY_JOINTS])
+        self._offset = np.array(c.franka_offset_rad, dtype=float)
         self.reset(self.initial_q)
 
     # ------------------------------------------------------------------ public
@@ -56,7 +58,7 @@ class OmyToFrankaRetarget:
     def raw_target(self, omy: dict[str, float]) -> np.ndarray:
         """Unclamped, unfiltered Franka 7-vector for the given OMY reading (for calibration)."""
         c = self.config
-        j = self._sign * (np.array([omy[f"{n}.pos"] for n in OMY_JOINTS]) - self._zero)
+        j = self._sign * self._scale * (np.array([omy[f"{n}.pos"] for n in OMY_JOINTS]) - self._zero)
         q = np.zeros(7)
         for m in c.arm_map:
             q[m.franka_index] = m.scale * j[OMY_JOINTS.index(m.omy_joint)] + m.offset_rad
@@ -68,7 +70,7 @@ class OmyToFrankaRetarget:
                 j[3], j[4], j[5], c.j7_offset_rad,
                 prev_j5=float(self._q[4]), prev_j7=float(self._q[6]), eps=c.wrist_singular_eps,
             )
-        return q
+        return q + self._offset
 
     def step(self, omy: dict[str, float]) -> np.ndarray:
         q_des = self.raw_target(omy)
@@ -97,7 +99,7 @@ class OmyToFrankaRetarget:
         """
         c = self.config
         raw = np.array([omy[f"{n}.pos"] for n in OMY_JOINTS])
-        s = {n: c.omy_sign.get(n, 1.0) for n in OMY_JOINTS}
+        s = {n: c.omy_sign.get(n, 1.0) * c.omy_scale.get(n, 1.0) for n in OMY_JOINTS}
         zero = dict(c.omy_zero_rad)
         # j = s * (raw - zero)  ->  zero = raw - want / s
         for m in c.arm_map:
