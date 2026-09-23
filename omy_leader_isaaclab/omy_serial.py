@@ -3,8 +3,9 @@
 Motors: joint_1..3 XH540-W150 (ids 1-3), joint_4..6 XC330-T288 (ids 4-6), gripper XC330-T181 (id 7).
 Arm motors are read torque-off in Extended Position mode; the gripper trigger is put in
 current-based position mode with a small current limit so it springs back to ``gripper_open_pos``
-(same behaviour as ``lerobot_teleoperator_omy``). Angles are returned in radians with the X-series
-centre tick (2048) as zero, so they are directly comparable with the lerobot plugin's output.
+(same registers and units as ``lerobot_teleoperator_omy``: Drive_Mode inverted, Homing_Offset 100,
+rest position in RANGE_0_100 units). Arm angles are radians with the X-series centre tick (2048) as
+zero; the gripper is radians from its rest position, positive when squeezed.
 """
 
 from __future__ import annotations
@@ -15,14 +16,26 @@ import time
 ADDR_TORQUE_ENABLE = 64
 ADDR_OPERATING_MODE = 11
 ADDR_DRIVE_MODE = 10
+ADDR_HOMING_OFFSET = 20
 ADDR_CURRENT_LIMIT = 38
 ADDR_GOAL_CURRENT = 102
 ADDR_GOAL_POSITION = 116
 ADDR_PRESENT_POSITION = 132
 MODE_EXTENDED_POSITION = 4
 MODE_CURRENT_POSITION = 5
+DRIVE_MODE_INVERTED = 1
 TICKS_PER_REV = 4096
 CENTER = 2048
+# Gripper setup mirrors lerobot_teleoperator_omy: Drive_Mode inverted, Homing_Offset 100, and the
+# rest position given in the plugin's RANGE_0_100 units (0..100 <-> 0..4095 ticks, no software
+# inversion since DynamixelMotorsBus.apply_drive_mode is False).
+GRIPPER_HOMING_OFFSET = 100
+GRIPPER_OPEN_POS_DEFAULT = 48.2  # plugin units; the trigger rest the operator settled on
+
+
+def gripper_pos_to_ticks(open_pos: float) -> int:
+    """lerobot RANGE_0_100 unnormalize with range 0..4095: int(v / 100 * 4095)."""
+    return int(min(100.0, max(0.0, open_pos)) / 100.0 * 4095)
 
 JOINT_IDS = {"joint_1": 1, "joint_2": 2, "joint_3": 3, "joint_4": 4, "joint_5": 5, "joint_6": 6, "gripper": 7}
 
@@ -37,7 +50,7 @@ class OmySerialLeader:
         port: str = "/dev/robotis_left",
         baudrate: int = 4_000_000,
         gripper_spring: bool = True,
-        gripper_open_ticks: int = int(CENTER + 48.2 / 200 * TICKS_PER_REV),  # == plugin gripper_open_pos 48.2
+        gripper_open_pos: float = GRIPPER_OPEN_POS_DEFAULT,  # plugin units 0..100 (48.2 -> tick 1973)
         gripper_current_limit: int = 100,
     ):
         from dynamixel_sdk import GroupSyncRead, PacketHandler, PortHandler  # noqa: PLC0415
@@ -59,6 +72,10 @@ class OmySerialLeader:
             if name != "gripper":
                 self._write1(i, ADDR_OPERATING_MODE, MODE_EXTENDED_POSITION)
         g = JOINT_IDS["gripper"]
+        gripper_open_ticks = gripper_pos_to_ticks(gripper_open_pos)
+        # EEPROM registers (torque is off here): same frame as the lerobot plugin's calibration
+        self._write1(g, ADDR_DRIVE_MODE, DRIVE_MODE_INVERTED)
+        self._write4(g, ADDR_HOMING_OFFSET, GRIPPER_HOMING_OFFSET)
         if gripper_spring:
             self._write1(g, ADDR_OPERATING_MODE, MODE_CURRENT_POSITION)
             self._write2(g, ADDR_CURRENT_LIMIT, gripper_current_limit)
@@ -91,8 +108,11 @@ class OmySerialLeader:
             v = self._reader.getData(i, ADDR_PRESENT_POSITION, 4)
             if v >= 2**31:  # signed 32-bit (extended position)
                 v -= 2**32
+            if name == "gripper":
+                self._raw_gripper_ticks = v
             out[f"{name}.pos"] = ticks_to_rad(v)
-        out["gripper.pos"] -= ticks_to_rad(self._gripper_open_ticks)
+        # gripper: 0 = trigger at rest, positive when squeezed (ticks grow), true angle in rad
+        out["gripper.pos"] = (self._raw_gripper_ticks - self._gripper_open_ticks) * (2.0 * math.pi / TICKS_PER_REV)
         return out
 
     def close(self):
@@ -106,10 +126,11 @@ class SerialClient:
     """Background reader with the same ``latest()`` API as :class:`link.FrameClient`, so calibration
     and monitor tools can read the leader directly on the sim machine (the common single-PC setup)."""
 
-    def __init__(self, port: str = "/dev/robotis_left", baudrate: int = 4_000_000, hz: float = 100.0):
+    def __init__(self, port: str = "/dev/robotis_left", baudrate: int = 4_000_000, hz: float = 100.0,
+                 gripper_open_pos: float = GRIPPER_OPEN_POS_DEFAULT):
         import threading
 
-        self._leader = OmySerialLeader(port, baudrate)
+        self._leader = OmySerialLeader(port, baudrate, gripper_open_pos=gripper_open_pos)
         self._buf: tuple[dict | None, float] = (None, 0.0)
         self._stop = threading.Event()
         self._period = 1.0 / hz
@@ -134,13 +155,13 @@ class SerialClient:
 
 
 def open_reader(source: str = "serial", port: str = "/dev/robotis_left", baudrate: int = 4_000_000,
-                tcp_host: str = "127.0.0.1", tcp_port: int = 5555):
+                tcp_host: str = "127.0.0.1", tcp_port: int = 5555, gripper_open_pos: float = GRIPPER_OPEN_POS_DEFAULT):
     """Return an object with ``latest()`` for either the local serial leader or a remote publisher."""
     if source == "tcp":
         from .link import FrameClient
 
         return FrameClient(tcp_host, tcp_port)
-    return SerialClient(port, baudrate)
+    return SerialClient(port, baudrate, gripper_open_pos=gripper_open_pos)
 
 
 if __name__ == "__main__":  # quick check: python -m omy_leader_isaaclab.omy_serial /dev/robotis_left
@@ -150,7 +171,8 @@ if __name__ == "__main__":  # quick check: python -m omy_leader_isaaclab.omy_ser
     try:
         while True:
             a = l.read()
-            print("  ".join(f"{k[:-4]}={math.degrees(v):+7.1f}" for k, v in a.items()), end="\r")
+            print("  ".join(f"{k[:-4]}={math.degrees(v):+7.1f}" for k, v in a.items())
+                  + f"   gripper_ticks={l._raw_gripper_ticks} (rest {l._gripper_open_ticks})", end="\r")
             time.sleep(0.05)
     except KeyboardInterrupt:
         l.close()

@@ -60,7 +60,7 @@ def main():
     else:
         from .omy_serial import OmySerialLeader  # noqa: PLC0415
 
-        leader = OmySerialLeader(args.port, args.baudrate)
+        leader = OmySerialLeader(args.port, args.baudrate, gripper_open_pos=args.gripper_open)
         get_action, disconnect = leader.read, leader.close
         args.units = "rad"  # the serial reader already returns radians, gripper 0 = released
     server = None if args.print else FrameServer(args.tcp_host, args.tcp_port)
@@ -75,7 +75,8 @@ def main():
         if args.units == "rad":
             return a
         out = {key: v * k for key, v in a.items() if key != "gripper.pos"}
-        out["gripper.pos"] = (a["gripper.pos"] - args.gripper_open) * k  # 0 = released
+        # gripper is RANGE_0_100 (100 units == one revolution), so 2*pi/100 per unit; 0 = released
+        out["gripper.pos"] = (a["gripper.pos"] - args.gripper_open) * (2.0 * k)
         return out
 
     period = 1.0 / args.fps

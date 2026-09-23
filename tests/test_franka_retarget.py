@@ -82,9 +82,9 @@ def test_rate_limit_and_clamp():
 
 def test_gripper_binary():
     rt = OmyToFrankaRetarget()
-    assert rt.gripper_command(-0.8) == -1.0
+    assert rt.gripper_command(math.radians(20)) == -1.0
     assert rt.gripper_command(0.0) == 1.0
-    assert rt.gripper_command(-0.39) == 1.0 and rt.gripper_command(-0.41) == -1.0
+    assert rt.gripper_command(math.radians(9)) == 1.0 and rt.gripper_command(math.radians(11)) == -1.0
 
 
 def test_auto_offset_maps_current_pose_to_home():

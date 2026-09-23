@@ -15,9 +15,9 @@ def test_identity_mirror_and_gripper_hysteresis():
     m = OmyMirror(MirrorConfig(vel_scale=1e9))
     a = m.step(reading(OMY_DEFAULT_Q))
     assert np.allclose(a[:6], OMY_DEFAULT_Q) and a[6] == 1.0
-    assert m.step(reading(OMY_DEFAULT_Q, math.radians(9)))[6] == -1.0  # squeezed -> close
-    assert m.step(reading(OMY_DEFAULT_Q, math.radians(5)))[6] == -1.0  # inside hysteresis band: stays closed
-    assert m.step(reading(OMY_DEFAULT_Q, math.radians(3)))[6] == 1.0   # released -> open
+    assert m.step(reading(OMY_DEFAULT_Q, math.radians(18)))[6] == -1.0  # squeezed -> close
+    assert m.step(reading(OMY_DEFAULT_Q, math.radians(10)))[6] == -1.0  # inside hysteresis band: stays closed
+    assert m.step(reading(OMY_DEFAULT_Q, math.radians(6)))[6] == 1.0   # released -> open
 
 
 def test_sign_and_auto_zero():

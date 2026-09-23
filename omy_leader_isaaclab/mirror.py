@@ -30,7 +30,7 @@ class MirrorConfig:
     zero_rad: dict[str, float] = field(default_factory=lambda: {j: 0.0 for j in OMY_JOINTS})
     # trigger reading when released / fully squeezed (rad); either ordering works
     gripper_open_rad: float = 0.0
-    gripper_closed_rad: float = math.radians(10.0)
+    gripper_closed_rad: float = math.radians(20.0)  # ~ full squeeze (true angle)
     gripper_threshold: float = 0.5  # fraction of travel; hysteresis +/- 0.1 around it
     joint_limit_rad: float = math.radians(170.0)  # symmetric soft clamp (sim joints are +/-2pi)
     vel_scale: float = 1.0

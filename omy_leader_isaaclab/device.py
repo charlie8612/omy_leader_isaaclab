@@ -43,6 +43,7 @@ class OmyLeaderCfg(DeviceCfg):
     dt: float = 1.0 / 50.0  # env control period, for the rate limiter
     vel_scale: float = 1.0
     hz: float = 100.0  # serial read rate
+    gripper_open_pos: float = 48.2  # trigger rest position, lerobot plugin units 0..100 (serial source)
     callbacks: dict = field(default_factory=dict)
     # Isaac Lab >= 3.0 resolves the device class from this field (DeviceCfg declares it as a
     # dataclass field, so a class attribute would be shadowed); older versions use DEVICE_MAP.
@@ -117,7 +118,7 @@ class OmyLeaderDevice(DeviceBase):
         elif c.source == "serial":
             from .omy_serial import OmySerialLeader
 
-            self._serial = OmySerialLeader(c.port, c.baudrate)
+            self._serial = OmySerialLeader(c.port, c.baudrate, gripper_open_pos=c.gripper_open_pos)
             self._buf: tuple[dict | None, float] = (None, 0.0)
             self._stop = threading.Event()
             threading.Thread(target=self._serial_loop, daemon=True).start()

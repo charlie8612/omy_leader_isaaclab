@@ -74,7 +74,7 @@ class OmyToFrankaConfig:
 
     # --- gripper ---
     # OMY handle reading (rad) at closed / open; Franka finger travel is 0 .. 0.04 m.
-    gripper_closed_rad: float = -0.8
+    gripper_closed_rad: float = math.radians(20.0)  # trigger fully squeezed (true angle, from rest)
     gripper_open_rad: float = 0.0
     # Binary action threshold as a fraction of travel: below -> close (-1), else open (+1).
     gripper_binary_threshold: float = 0.5

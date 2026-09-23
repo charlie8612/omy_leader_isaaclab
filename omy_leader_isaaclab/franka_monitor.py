@@ -38,13 +38,14 @@ def main():
     ap.add_argument("--baudrate", type=int, default=4_000_000)
     ap.add_argument("--tcp-host", default="127.0.0.1")
     ap.add_argument("--tcp-port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--gripper-open", type=float, default=48.2, help="trigger rest position, plugin units 0..100 (serial)")
     ap.add_argument("--calib", default="", help="omy_calib.json; if given, also show mapped Franka joints")
     ap.add_argument("--hz", type=float, default=10.0)
     args = ap.parse_args()
 
     cfg = load_calib(args.calib) if args.calib else DEFAULT_OMY_TO_FRANKA_CONFIG
     rt = OmyToFrankaRetarget(cfg)
-    client = open_reader(args.source, args.port, args.baudrate, args.tcp_host, args.tcp_port)
+    client = open_reader(args.source, args.port, args.baudrate, args.tcp_host, args.tcp_port, args.gripper_open)
     d = math.degrees
     print("waiting for stream ...")
     try:
